@@ -61,7 +61,7 @@ collect-logs:
 	railway logs --service OrbitMind
 
 collect-status:
-	railway deployment list --service OrbitMind
+	python scripts/collect_status.py
 
 # Development
 test:
