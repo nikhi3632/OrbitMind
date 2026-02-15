@@ -1,6 +1,6 @@
 # OrbitMind Makefile
 
-.PHONY: help install migrate db-status db-delete db-reset db-shell db-count collect test clean
+.PHONY: help install migrate db-status db-delete db-reset db-shell db-count collect-start collect-stop collect-logs collect-status test clean
 
 help:
 	@echo "OrbitMind Commands"
@@ -17,8 +17,11 @@ help:
 	@echo "  make db-shell      Open psql shell to database"
 	@echo "  make db-count      Show row counts"
 	@echo ""
-	@echo "Collector:"
-	@echo "  make collect       Run collector (foreground)"
+	@echo "Collector (Railway):"
+	@echo "  make collect-start  Start collector on Railway"
+	@echo "  make collect-stop   Stop collector on Railway"
+	@echo "  make collect-logs   View Railway logs"
+	@echo "  make collect-status Show Railway status"
 	@echo ""
 	@echo "Development:"
 	@echo "  make test          Run tests"
@@ -47,9 +50,18 @@ db-shell:
 db-count:
 	python scripts/db_count.py
 
-# Collector
-collect:
-	python scripts/run_collector.py
+# Collector (Railway)
+collect-start:
+	railway up --service OrbitMind --detach
+
+collect-stop:
+	railway down --service OrbitMind -y
+
+collect-logs:
+	railway logs --service OrbitMind
+
+collect-status:
+	railway deployment list --service OrbitMind
 
 # Development
 test:
