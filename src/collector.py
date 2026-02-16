@@ -20,6 +20,7 @@ from src.config import (
     CHANNELS,
     DB_BATCH_SIZE,
     DB_FLUSH_INTERVAL,
+    STALE_CONNECTION_TIMEOUT,
 )
 from src.db import TelemetryDB
 
@@ -73,6 +74,10 @@ class ConnectionListener(ClientListener):
         logger.info(f"Connection status: {status}")
         if status.startswith("CONNECTED"):
             self.collector.on_connected()
+        elif status == "STALLED":
+            logger.warning("Connection stalled - waiting for keepalive or data")
+        elif status.startswith("DISCONNECTED"):
+            self.collector.connected = False
 
     def onServerError(self, code, message):
         logger.error(f"Server error {code}: {message}")
@@ -98,6 +103,7 @@ class TelemetryCollector:
         # Connection state
         self.connected = False
         self.running = False
+        self.last_data_time = 0.0
 
         # Stats
         self.total_received = 0
@@ -116,6 +122,7 @@ class TelemetryCollector:
 
         self.running = True
         self.last_flush_time = time.time()
+        self.last_data_time = time.time()
 
         # Connect to Lightstreamer
         self._connect()
@@ -137,6 +144,11 @@ class TelemetryCollector:
                 if now - last_stats_time >= 30:
                     self._log_stats()
                     last_stats_time = now
+
+                # Check for stale connection
+                if now - self.last_data_time >= STALE_CONNECTION_TIMEOUT:
+                    logger.warning(f"No data received for {STALE_CONNECTION_TIMEOUT}s, reconnecting...")
+                    self._reconnect()
 
         except asyncio.CancelledError:
             logger.info("Shutdown requested")
@@ -173,6 +185,12 @@ class TelemetryCollector:
         self.client = LightstreamerClient(LIGHTSTREAMER_SERVER, LIGHTSTREAMER_ADAPTER)
         self.client.addListener(ConnectionListener(self))
 
+        # Configure connection options for reliability
+        options = self.client.connectionOptions
+        options.setReverseHeartbeatInterval(30000)  # Client pings server every 30s
+        options.setStalledTimeout(5000)  # Enter STALLED after 5s of silence
+        options.setReconnectTimeout(10000)  # Reconnect after 10s in STALLED
+
         # Create subscription
         self.subscription = Subscription(
             mode="MERGE",
@@ -187,9 +205,25 @@ class TelemetryCollector:
         self.client.subscribe(self.subscription)
         self.client.connect()
 
+    def _reconnect(self):
+        """Disconnect and reconnect to Lightstreamer."""
+        self.connected = False
+
+        # Disconnect existing client
+        if self.client:
+            try:
+                self.client.disconnect()
+            except Exception as e:
+                logger.warning(f"Error during disconnect: {e}")
+
+        # Reset and reconnect
+        self.last_data_time = time.time()
+        self._connect()
+
     def on_connected(self):
         """Called when connection is established."""
         self.connected = True
+        self.last_data_time = time.time()
         logger.info(f"Connected! Subscribed to {len(CHANNELS)} channels")
 
     def on_telemetry(self, channel_id: str, value: float, iss_timestamp: str):
@@ -199,6 +233,7 @@ class TelemetryCollector:
         with self.buffer_lock:
             self.buffer.append((receive_time, channel_id, value, iss_timestamp))
             self.total_received += 1
+            self.last_data_time = time.time()
 
             # Flush if buffer is full
             if len(self.buffer) >= DB_BATCH_SIZE:

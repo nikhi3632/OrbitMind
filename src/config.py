@@ -25,3 +25,4 @@ CHANNELS = [
 # Collector settings
 DB_BATCH_SIZE = 100
 DB_FLUSH_INTERVAL = 5.0
+STALE_CONNECTION_TIMEOUT = 60.0  # Reconnect if no data for this many seconds
