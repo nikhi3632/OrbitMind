@@ -1,4 +1,5 @@
 # OrbitMind Makefile
+PYTHON = .venv/bin/python
 
 .PHONY: help install migrate db-status db-delete db-reset db-shell db-count collect collect-start collect-stop collect-logs collect-status test clean
 
@@ -30,31 +31,31 @@ help:
 
 # Setup
 install:
-	pip install -r requirements.txt
+	$(PYTHON) -m pip install -r requirements.txt
 
 # Database
 migrate:
-	python scripts/migrate.py
+	$(PYTHON) scripts/migrate.py
 
 db-status:
-	python scripts/migrate.py --status
+	$(PYTHON) scripts/migrate.py --status
 
 db-delete:
-	python scripts/db_delete.py
+	$(PYTHON) scripts/db_delete.py
 
 db-reset:
-	python scripts/db_reset.py
+	$(PYTHON) scripts/db_reset.py
 
 db-shell:
-	psql "$$(python scripts/db_url.py)"
+	psql "$$($(PYTHON) scripts/db_url.py)"
 
 db-count:
-	python scripts/db_count.py
+	$(PYTHON) scripts/db_count.py
 
 # Collector (Railway)
 collect:
 	railway down --service OrbitMind -y || true
-	echo "y" | python scripts/db_reset.py
+	echo "y" | $(PYTHON) scripts/db_reset.py
 	railway up --service OrbitMind --detach
 
 collect-start:
@@ -67,11 +68,11 @@ collect-logs:
 	railway logs --service OrbitMind
 
 collect-status:
-	python scripts/collect_status.py
+	$(PYTHON) scripts/collect_status.py
 
 # Development
 test:
-	python -m pytest tests/ -v
+	$(PYTHON) -m pytest tests/ -v
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
